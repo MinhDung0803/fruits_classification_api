@@ -1,0 +1,7 @@
+opencv-contrib-python-headless
+flask==1.1.2
+flask_cors
+Pillow
+pretrainedmodels==0.7.4
+python-dotenv
+opencv-python
