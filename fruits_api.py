@@ -1,13 +1,15 @@
 import torch
 import os
+import io
 from dotenv import load_dotenv
 from models import ResNet_model
 import torch.nn as nn
 from torchvision import transforms
 import numpy as np
 from PIL import Image
-from torch.autograd import Variable
 import torch.backends.cudnn as cudnn
+from flask import Flask, jsonify
+from flask_cors import CORS
 
 env_path = os.path.abspath(os.path.join(os.path.dirname(__file__), ".env"))
 load_dotenv(dotenv_path=env_path)
@@ -19,6 +21,17 @@ nclasses = int(os.getenv("CLASSES"))  # Number of classes in model
 # model
 model = None
 
+# flask app
+app = Flask(__name__)
+CORS(app)
+
+def load_image(image):
+    image = Image.open(io.BytesIO(image))
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+    return image
+
+
 def transform_data(rgb_image):
     data_transform = transforms.Compose(
         [
@@ -27,56 +40,28 @@ def transform_data(rgb_image):
         ]
     )
     tensor = data_transform(rgb_image)
-    print(tensor.shape)
     result = torch.unsqueeze(tensor, 0)
-    print(result.shape)
     return result
 
 
-def load_model(num_of_classes):
+def load_model(number_of_classes):
     global model
 
-    # get model architecture
-    model = ResNet_model(num_of_classes)
+    model = ResNet_model(number_of_classes)
     model_path = os.getenv("MODEL_PATH")
-    model = torch.load(model_path)
-    # Remove the final fc layer and classifier layer
+    model.load_state_dict(torch.load(model_path))
     model.network.fc = nn.Sequential()
-    # Change to test mode
-    model = model.eval()
-    # set gpu ids
+    model.eval()
     torch.cuda.set_device(gpu_ids)
-    # inbuilt cudnn auto-tuner to find the best algorithm with fixed input size
     cudnn.benchmark = True
-    use_gpu = torch.cuda.is_available()
-    # check condition
-    if use_gpu:
-        model = model.cuda()
+    if torch.cuda.is_available():
+        model.cuda()
 
 
-def warmup():
-    """ Warm up process
-    - Create a dummy data
-    """
+def extrac_freature(image):
     global model
-
-    # create dummy data
-    img_array = np.random.randint(0, 255, (224, 224, 3), dtype=np.uint8)
-    rgb_image = Image.fromarray(img_array)
-
-    # data transformation
-    img = transform_data(rgb_image)
-
-    # features = torch.FloatTensor()
-    # ff = torch.FloatTensor(1, 512).zero_().cuda()
-    input_img = Variable(img.cuda())
-    # print(input_img.shape)
-    outputs = model(input_img)
-    print(outputs.shape)
-    print(outputs)
+    image_trans = transform_data(image)
+    output = model(image_trans)
+    return output
 
 
-    print("[INFO] Finished warming up")
-
-# load_model(nclasses)
-# warmup()
